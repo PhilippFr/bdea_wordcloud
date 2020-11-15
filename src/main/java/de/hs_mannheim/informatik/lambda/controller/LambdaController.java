@@ -7,6 +7,14 @@ import com.kennycason.kumo.bg.CircleBackground;
 import com.kennycason.kumo.font.scale.SqrtFontScalar;
 import com.kennycason.kumo.nlp.FrequencyAnalyzer;
 import com.kennycason.kumo.palette.ColorPalette;
+import de.hs_mannheim.informatik.lambda.hadoop.WordCount;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.log4j.BasicConfigurator;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +30,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Controller
 public class LambdaController {
@@ -37,14 +46,13 @@ public class LambdaController {
 	}
 
 	@PostMapping("/upload")
-	public String handleFileUpload(@RequestParam("file") MultipartFile file, Model model) {
+	public String handleFileUpload(@RequestParam("file") MultipartFile file, Model model){
 
 		try {
 			model.addAttribute("message", "Datei erfolgreich hochgeladen: " + file.getOriginalFilename());
-			this.saveDocument(file);
-			createTagCloud(file.getOriginalFilename(), new String(file.getBytes()));
+			createTagCloud(file.getOriginalFilename(), this.saveDocument(file));
 			model.addAttribute("files", listTagClouds());
-		} catch (IOException e) {
+		} catch (Exception e) {
 			e.printStackTrace();
 			model.addAttribute("message", "Da gab es einen Fehler: " + e.getMessage());
 		}
@@ -52,15 +60,16 @@ public class LambdaController {
 		return "upload";
 	}
 
-	private void saveDocument(MultipartFile file){
-		try {
+	private Path saveDocument(MultipartFile file) throws Exception{
 			// Get the file and save it somewhere
+			File directory = new File(DOCUMENT_PATH);
+			if (! directory.exists()){
+				directory.mkdir();
+			}
 			byte[] bytes = file.getBytes();
 			Path path = Paths.get(DOCUMENT_PATH + file.getOriginalFilename());
 			Files.write(path, bytes);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+			return path;
 	}
 
 	private String[] listTagClouds() {
@@ -76,19 +85,9 @@ public class LambdaController {
 		return clouds;
 	}
 
-	private void createTagCloud(String filename, String inhalt) throws IOException {
+	private void createTagCloud(String filename, Path path) throws IOException, InterruptedException, ClassNotFoundException {
 
-		// Needs to replace this
-		final FrequencyAnalyzer frequencyAnalyzer = new FrequencyAnalyzer();
-		frequencyAnalyzer.setWordFrequenciesToReturn(300);
-		frequencyAnalyzer.setMinWordLength(4);
-
-
-
-
-		List<String> texts = new ArrayList<>();
-		texts.add(inhalt);
-		final List<WordFrequency> wordFrequencies = frequencyAnalyzer.load(texts);
+		final List<WordFrequency> wordFrequencies = WordCount.tagCloudWordFrequency(path);
 
 		final Dimension dimension = new Dimension(600, 600);
 		final WordCloud wordCloud = new WordCloud(dimension, CollisionMode.PIXEL_PERFECT);
@@ -97,6 +96,10 @@ public class LambdaController {
 		wordCloud.setColorPalette(new ColorPalette(new Color(0x4055F1), new Color(0x408DF1), new Color(0x40AAF1), new Color(0x40C5F1), new Color(0x40D3F1), new Color(0xFFFFFF)));
 		wordCloud.setFontScalar(new SqrtFontScalar(8, 50));
 		wordCloud.build(wordFrequencies);
+		File directory = new File(CLOUD_PATH);
+		if (! directory.exists()){
+			directory.mkdir();
+		}
 		wordCloud.writeToFile(CLOUD_PATH + filename + ".png");
 	}
 
