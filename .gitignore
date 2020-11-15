@@ -21,6 +21,6 @@ log/
 target/
 
 #self
-tagclouds/
-
+tagclouds/*
+documents/*
 

@@ -1,19 +1,5 @@
 package de.hs_mannheim.informatik.lambda.controller;
 
-import java.awt.Color;
-import java.awt.Dimension;
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.multipart.MultipartFile;
-
 import com.kennycason.kumo.CollisionMode;
 import com.kennycason.kumo.WordCloud;
 import com.kennycason.kumo.WordFrequency;
@@ -21,10 +7,27 @@ import com.kennycason.kumo.bg.CircleBackground;
 import com.kennycason.kumo.font.scale.SqrtFontScalar;
 import com.kennycason.kumo.nlp.FrequencyAnalyzer;
 import com.kennycason.kumo.palette.ColorPalette;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.awt.*;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 @Controller
 public class LambdaController {
 	public final static String CLOUD_PATH = "tagclouds/";
+	public final static String DOCUMENT_PATH = "documents/";
+
 
 	@GetMapping("/upload")
 	public String forward(Model model) {
@@ -38,6 +41,7 @@ public class LambdaController {
 
 		try {
 			model.addAttribute("message", "Datei erfolgreich hochgeladen: " + file.getOriginalFilename());
+			this.saveDocument(file);
 			createTagCloud(file.getOriginalFilename(), new String(file.getBytes()));
 			model.addAttribute("files", listTagClouds());
 		} catch (IOException e) {
@@ -46,6 +50,17 @@ public class LambdaController {
 		}
 
 		return "upload";
+	}
+
+	private void saveDocument(MultipartFile file){
+		try {
+			// Get the file and save it somewhere
+			byte[] bytes = file.getBytes();
+			Path path = Paths.get(DOCUMENT_PATH + file.getOriginalFilename());
+			Files.write(path, bytes);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	private String[] listTagClouds() {
