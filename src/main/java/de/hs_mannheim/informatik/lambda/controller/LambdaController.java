@@ -86,7 +86,6 @@ public class LambdaController {
 	}
 
 	private void createTagCloud(String filename, Path path) throws IOException, InterruptedException, ClassNotFoundException {
-
 		final List<WordFrequency> wordFrequencies = WordCount.tagCloudWordFrequency(path);
 
 		final Dimension dimension = new Dimension(600, 600);
