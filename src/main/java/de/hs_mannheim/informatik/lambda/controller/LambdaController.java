@@ -8,13 +8,6 @@ import com.kennycason.kumo.font.scale.SqrtFontScalar;
 import com.kennycason.kumo.nlp.FrequencyAnalyzer;
 import com.kennycason.kumo.palette.ColorPalette;
 import de.hs_mannheim.informatik.lambda.hadoop.WordCount;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.log4j.BasicConfigurator;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,76 +23,104 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+
+import static org.apache.commons.io.FilenameUtils.removeExtension;
 
 @Controller
 public class LambdaController {
-	public final static String CLOUD_PATH = "tagclouds/";
-	public final static String DOCUMENT_PATH = "documents/";
+    public final static String NON_NORMALIZED_CLOUD_PATH = "non-normalized-tagclouds/";
+    public final static String NORMALIZED_CLOUD_PATH = "normalized-tagclouds/";
+    public final static String DOCUMENT_PATH = "documents/";
+    public final static String NORMALIZED_TERM_FREQUENCIES_PATH = "normalized-term-frequencies/";
+    public final static String DOCUMENT_FREQUENCIES_PATH = "inverse-document-frequencies/";
+    public final static String TD_IDF_PATH = "td-idf/";
+    public final static int NUM_REDUCE_TASKS = 4;
 
+    @GetMapping(value="/runDoc")
+    public void run() //I want to link the button click to this method
+    {
+        System.out.println("Test1");
+        System.out.println("Test2");
+        System.out.println("Test3");
+        System.out.println("Test4");
+    }
 
-	@GetMapping("/upload")
-	public String forward(Model model) {
-		model.addAttribute("files", listTagClouds());
+    @GetMapping("/upload")
+    public String forward(Model model) {
+        model.addAttribute("nonNormalizedTagClouds", listTagClouds(NON_NORMALIZED_CLOUD_PATH));
+        model.addAttribute("normalizedTagClouds", listTagClouds(NORMALIZED_CLOUD_PATH));
+        model.addAttribute("nonNormalizedTagCloudsPath", NON_NORMALIZED_CLOUD_PATH);
+        model.addAttribute("normalizedTagCloudsPath", NORMALIZED_CLOUD_PATH);
 
-		return "upload";
-	}
+        return "upload";
+    }
 
-	@PostMapping("/upload")
-	public String handleFileUpload(@RequestParam("file") MultipartFile file, Model model){
+    @PostMapping("/upload")
+    public String handleFileUpload(@RequestParam("file") MultipartFile file, Model model) {
+        try {
+            model.addAttribute("message", "Datei erfolgreich hochgeladen: " + file.getOriginalFilename());
+            Path path = this.saveDocument(file);
+            createNonNormalizedTagCloud(removeExtension(file.getOriginalFilename()), new String(file.getBytes()));
+            testNormalizer(path);
+            model.addAttribute("nonNormalizedTagClouds", listTagClouds(NON_NORMALIZED_CLOUD_PATH));
+            model.addAttribute("normalizedTagClouds", listTagClouds(NORMALIZED_CLOUD_PATH));
+            model.addAttribute("nonNormalizedTagCloudsPath", NON_NORMALIZED_CLOUD_PATH);
+            model.addAttribute("normalizedTagCloudsPath", NORMALIZED_CLOUD_PATH);
+        } catch (Exception e) {
+            e.printStackTrace();
+            model.addAttribute("message", "Da gab es einen Fehler: " + e.getMessage());
+        }
 
-		try {
-			model.addAttribute("message", "Datei erfolgreich hochgeladen: " + file.getOriginalFilename());
-			createTagCloud(file.getOriginalFilename(), this.saveDocument(file));
-			model.addAttribute("files", listTagClouds());
-		} catch (Exception e) {
-			e.printStackTrace();
-			model.addAttribute("message", "Da gab es einen Fehler: " + e.getMessage());
-		}
+        return "upload";
+    }
 
-		return "upload";
-	}
+    private Path saveDocument(MultipartFile file) throws Exception {
+        // Get the file and save it somewhere
+        File directory = new File(DOCUMENT_PATH);
+        if (!directory.exists()) {
+            directory.mkdir();
+        }
+        byte[] bytes = file.getBytes();
+        Path path = Paths.get(DOCUMENT_PATH + file.getOriginalFilename());
+        Files.write(path, bytes);
 
-	private Path saveDocument(MultipartFile file) throws Exception{
-			// Get the file and save it somewhere
-			File directory = new File(DOCUMENT_PATH);
-			if (! directory.exists()){
-				directory.mkdir();
-			}
-			byte[] bytes = file.getBytes();
-			Path path = Paths.get(DOCUMENT_PATH + file.getOriginalFilename());
-			Files.write(path, bytes);
-			return path;
-	}
+        return path;
+    }
 
-	private String[] listTagClouds() {
-		File[] files = new File(CLOUD_PATH).listFiles();
-		String[] clouds = new String[files.length];
+    private String[] listTagClouds(String path) {
+        File[] files = new File(path).listFiles();
+        String[] clouds = new String[files.length];
+        String name;
 
-		for (int i = 0; i < files.length; i++) {
-			String name = files[i].getName();
-			if (files[i].getName().endsWith(".png"))
-				clouds[i] = CLOUD_PATH + name;
-		}
+        for (int i = 0; i < files.length; i++) {
+            name = files[i].getName();
+            if (files[i].getName().endsWith(".png"))
+                clouds[i] = name;
+        }
 
-		return clouds;
-	}
+        return clouds;
+    }
 
-	private void createTagCloud(String filename, Path path) throws IOException, InterruptedException, ClassNotFoundException {
-		final List<WordFrequency> wordFrequencies = WordCount.tagCloudWordFrequency(path);
+    private void testNormalizer(Path path) throws IOException, InterruptedException, ClassNotFoundException {
+        WordCount.normalizedWordFrequency(path);
+    }
 
-		final Dimension dimension = new Dimension(600, 600);
-		final WordCloud wordCloud = new WordCloud(dimension, CollisionMode.PIXEL_PERFECT);
-		wordCloud.setPadding(2);
-		wordCloud.setBackground(new CircleBackground(300));
-		wordCloud.setColorPalette(new ColorPalette(new Color(0x4055F1), new Color(0x408DF1), new Color(0x40AAF1), new Color(0x40C5F1), new Color(0x40D3F1), new Color(0xFFFFFF)));
-		wordCloud.setFontScalar(new SqrtFontScalar(8, 50));
-		wordCloud.build(wordFrequencies);
-		File directory = new File(CLOUD_PATH);
-		if (! directory.exists()){
-			directory.mkdir();
-		}
-		wordCloud.writeToFile(CLOUD_PATH + filename + ".png");
-	}
+    private void createNonNormalizedTagCloud(String filename, String content) throws IOException, InterruptedException, ClassNotFoundException {
+        final FrequencyAnalyzer frequencyAnalyzer = new FrequencyAnalyzer();
+        frequencyAnalyzer.setWordFrequenciesToReturn(300);
+        frequencyAnalyzer.setMinWordLength(4);
 
+        List<String> texts = new ArrayList<>();
+        texts.add(content);
+        final List<WordFrequency> wordFrequencies = frequencyAnalyzer.load(texts);
+
+        final Dimension dimension = new Dimension(600, 600);
+        final WordCloud wordCloud = new WordCloud(dimension, CollisionMode.PIXEL_PERFECT);
+        wordCloud.setPadding(2);
+        wordCloud.setBackground(new CircleBackground(300));
+        wordCloud.setColorPalette(new ColorPalette(new Color(0x4055F1), new Color(0x408DF1), new Color(0x40AAF1), new Color(0x40C5F1), new Color(0x40D3F1), new Color(0xFFFFFF)));
+        wordCloud.setFontScalar(new SqrtFontScalar(8, 50));
+        wordCloud.build(wordFrequencies);
+        wordCloud.writeToFile(NON_NORMALIZED_CLOUD_PATH + filename + ".png");
+    }
 }

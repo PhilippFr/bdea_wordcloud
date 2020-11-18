@@ -21,6 +21,9 @@ log/
 target/
 
 #self
-tagclouds/*
+non-normalized-tagclouds/*
+normalized-tagclouds/*
 documents/*
-
+normalized-term-frequencies/*
+inverse-document-frequencies/*
+td-idf/*
