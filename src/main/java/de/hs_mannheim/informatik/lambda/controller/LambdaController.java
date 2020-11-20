@@ -32,17 +32,22 @@ public class LambdaController {
     public final static String NORMALIZED_CLOUD_PATH = "normalized-tagclouds/";
     public final static String DOCUMENT_PATH = "documents/";
     public final static String NORMALIZED_TERM_FREQUENCIES_PATH = "normalized-term-frequencies/";
-    public final static String DOCUMENT_FREQUENCIES_PATH = "inverse-document-frequencies/";
+    public final static String TERM_FREQUENCIES_PATH = "term-frequencies/";
+    public final static String INVERSE_DOCUMENT_FREQUENCIES_PATH = "inverse-document-frequencies/";
     public final static String TD_IDF_PATH = "td-idf/";
-    public final static int NUM_REDUCE_TASKS = 4;
+    public final static int NUM_REDUCE_TASKS = 1;
 
-    @GetMapping(value="/runDoc")
-    public void run() //I want to link the button click to this method
-    {
-        System.out.println("Test1");
-        System.out.println("Test2");
-        System.out.println("Test3");
-        System.out.println("Test4");
+    @GetMapping("/createNormalizedTagClouds")
+    public String createNormalizedTagClouds(Model model) throws InterruptedException, IOException, ClassNotFoundException {
+        System.out.println("WORKING WORKING WORKING");
+
+        WordCount.allTfIdf();
+        model.addAttribute("nonNormalizedTagClouds", listTagClouds(NON_NORMALIZED_CLOUD_PATH));
+        model.addAttribute("normalizedTagClouds", listTagClouds(NORMALIZED_CLOUD_PATH));
+        model.addAttribute("nonNormalizedTagCloudsPath", NON_NORMALIZED_CLOUD_PATH);
+        model.addAttribute("normalizedTagCloudsPath", NORMALIZED_CLOUD_PATH);
+
+        return "upload";
     }
 
     @GetMapping("/upload")

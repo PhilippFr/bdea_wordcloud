@@ -37,6 +37,7 @@
 
 <div>
     <h3>Normalisierte Tag Clouds</h3>
+    <input type="button"  onclick="location.href='/createNormalizedTagClouds'" value="Normalisierte Tag Clouds erstellen" >
     <ul>
         <li th:each="file : ${normalizedTagClouds}">
             <a th:href="${normalizedTagCloudsPath + file}" th:text="${file}" th:target="_blank"></a>

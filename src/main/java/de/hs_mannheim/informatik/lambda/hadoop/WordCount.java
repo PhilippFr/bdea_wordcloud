@@ -1,7 +1,14 @@
 package de.hs_mannheim.informatik.lambda.hadoop;
 
+import com.kennycason.kumo.CollisionMode;
+import com.kennycason.kumo.WordCloud;
 import com.kennycason.kumo.WordFrequency;
+import com.kennycason.kumo.bg.CircleBackground;
+import com.kennycason.kumo.font.scale.SqrtFontScalar;
+import com.kennycason.kumo.palette.ColorPalette;
 import de.hs_mannheim.informatik.lambda.controller.LambdaController;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
@@ -12,19 +19,27 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.reduce.IntSumReducer;
 import org.apache.log4j.BasicConfigurator;
 
+import java.awt.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -65,14 +80,20 @@ public class WordCount {
 
         FileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path(path.toAbsolutePath().toString()));
 
-        job.setOutputFormatClass(SequenceFileOutputFormat.class);
-
+        /*
         // deleteDirectoryStream(new File("/tmp/wc-output").toPath());
         org.apache.hadoop.fs.Path wcPath = new org.apache.hadoop.fs.Path("/tmp/wc-output-" + now);
         SequenceFileOutputFormat.setOutputPath(job, wcPath);
+        */
+
+        deleteDirectoryStream(new File(LambdaController.TERM_FREQUENCIES_PATH + removeExtension(path.getFileName().toString())).toPath());
+        org.apache.hadoop.fs.Path wcOutputPath = new org.apache.hadoop.fs.Path(LambdaController.TERM_FREQUENCIES_PATH + removeExtension(path.getFileName().toString()));
+        FileOutputFormat.setOutputPath(job, wcOutputPath);
 
         job.waitForCompletion(true);
 
+
+        /*
         // -----------------------> Job 2
 
         job = Job.getInstance(conf, "frequencySort");
@@ -91,14 +112,15 @@ public class WordCount {
 
         SequenceFileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path("/tmp/wc-output-" + now));
 
-
-        // deleteDirectoryStream(new File("/tmp/fs-output-" + now).toPath());
-        FileOutputFormat.setOutputPath(job, new org.apache.hadoop.fs.Path("/tmp/fs-output-" + now));
+        deleteDirectoryStream(new File(LambdaController.TERM_FREQUENCIES_PATH + removeExtension(path.getFileName().toString())).toPath());
+        org.apache.hadoop.fs.Path outputPath = new org.apache.hadoop.fs.Path(LambdaController.TERM_FREQUENCIES_PATH + removeExtension(path.getFileName().toString()));
+        FileOutputFormat.setOutputPath(job, outputPath);
 
         job.waitForCompletion(true);
 
 
         // -----------------------> Determine highest frequency
+
 
         ArrayList<String> topRows = new ArrayList<>();
 
@@ -150,15 +172,17 @@ public class WordCount {
         FileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path("/tmp/fs-output-" + now));
 
         deleteDirectoryStream(new File(LambdaController.NORMALIZED_TERM_FREQUENCIES_PATH + removeExtension(path.getFileName().toString())).toPath());
-        org.apache.hadoop.fs.Path outputPath =  new org.apache.hadoop.fs.Path(LambdaController.NORMALIZED_TERM_FREQUENCIES_PATH + removeExtension(path.getFileName().toString()));
+        org.apache.hadoop.fs.Path outputPath = new org.apache.hadoop.fs.Path(LambdaController.NORMALIZED_TERM_FREQUENCIES_PATH + removeExtension(path.getFileName().toString()));
         FileOutputFormat.setOutputPath(job, outputPath);
 
         job.waitForCompletion(true);
 
+        */
+
         // -----------------------> Hadoop finished
 
         documentFrequency();
-        tfIdf(outputPath, wcPath);
+        singleTfIdf(wcOutputPath);
     }
 
     public static void documentFrequency() throws IOException, ClassNotFoundException, InterruptedException {
@@ -178,18 +202,18 @@ public class WordCount {
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
 
-        File[] folders = new File(LambdaController.NORMALIZED_TERM_FREQUENCIES_PATH).listFiles();
+        File[] folders = new File(LambdaController.TERM_FREQUENCIES_PATH).listFiles();
 
         conf.setInt("numberOfDocuments", folders.length);
 
         org.apache.hadoop.fs.Path folderPath;
 
-        for (File folder : folders){
-            if(folder.isDirectory()){
+        for (File folder : folders) {
+            if (folder.isDirectory()) {
                 folderPath = new org.apache.hadoop.fs.Path(folder.getAbsolutePath());
                 FileInputFormat.addInputPath(job, folderPath);
                 System.out.println("Adding folder: " + folder.getName() + " at: " + folderPath);
-            }else{
+            } else {
                 System.out.println("FOUND NON FOLDER FILE: " + folder.getName());
             }
         }
@@ -216,21 +240,24 @@ public class WordCount {
 
         SequenceFileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path("/tmp/df-output-" + now));
 
-        deleteDirectoryStream(new File(LambdaController.DOCUMENT_FREQUENCIES_PATH).toPath());
-        FileOutputFormat.setOutputPath(job, new org.apache.hadoop.fs.Path(LambdaController.DOCUMENT_FREQUENCIES_PATH));
+        deleteDirectoryStream(new File(LambdaController.INVERSE_DOCUMENT_FREQUENCIES_PATH).toPath());
+        FileOutputFormat.setOutputPath(job, new org.apache.hadoop.fs.Path(LambdaController.INVERSE_DOCUMENT_FREQUENCIES_PATH));
 
         job.waitForCompletion(true);
 
 
     }
 
-    public static void tfIdf(org.apache.hadoop.fs.Path path, org.apache.hadoop.fs.Path wcPath) throws IOException, ClassNotFoundException, InterruptedException {
+    public static void singleTfIdf(org.apache.hadoop.fs.Path documentWcPath) throws IOException, ClassNotFoundException, InterruptedException {
         long now = System.currentTimeMillis();
 
+
+        /*
         BasicConfigurator.configure();                    // Log4j Config oder ConfigFile in Resources Folder
         System.setProperty("hadoop.home.dir", "/");
 
         Configuration conf = new Configuration();
+
 
         // WC SequenceFileInput and Switch and file output
 
@@ -253,9 +280,16 @@ public class WordCount {
 
         job.waitForCompletion(true);
 
+         */
+
         // tfIdf Job
 
-        job = Job.getInstance(conf, "wordFrequency");
+        BasicConfigurator.configure();                    // Log4j Config oder ConfigFile in Resources Folder
+        System.setProperty("hadoop.home.dir", "/");
+
+        Configuration conf = new Configuration();
+
+        Job job = Job.getInstance(conf, "wordFrequency");
         job.setJarByClass(WordCount.class);
         job.setMapperClass(TfIdfMapper.class);
         job.setReducerClass(TfIdfReducer.class);
@@ -263,9 +297,9 @@ public class WordCount {
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(DoubleWritable.class);
 
-        FileInputFormat.addInputPath(job, path);
-        FileInputFormat.addInputPath(job, wcFilePath);
-        FileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path(LambdaController.DOCUMENT_FREQUENCIES_PATH));
+        // FileInputFormat.addInputPath(job, path);
+        FileInputFormat.addInputPath(job, documentWcPath);
+        FileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path(LambdaController.INVERSE_DOCUMENT_FREQUENCIES_PATH));
 
 
         job.setOutputFormatClass(SequenceFileOutputFormat.class);
@@ -291,15 +325,157 @@ public class WordCount {
 
         SequenceFileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path("/tmp/tfIdf-output-" + now));
 
-        deleteDirectoryStream(new File(LambdaController.TD_IDF_PATH + removeExtension(path.getName())).toPath());
-        org.apache.hadoop.fs.Path outputPath =  new org.apache.hadoop.fs.Path(LambdaController.TD_IDF_PATH + removeExtension(path.getName()));
+        deleteDirectoryStream(new File(LambdaController.TD_IDF_PATH + removeExtension(documentWcPath.getName())).toPath());
+        org.apache.hadoop.fs.Path outputPath = new org.apache.hadoop.fs.Path(LambdaController.TD_IDF_PATH + removeExtension(documentWcPath.getName()));
+
+        FileOutputFormat.setOutputPath(job, outputPath);
+
+        job.waitForCompletion(true);
+
+        List<WordFrequency> wordFrequencies = new ArrayList<WordFrequency>();
+
+        File[] outputFiles = new File(outputPath.toString()).listFiles();
+        for (int i = 0; i < outputFiles.length; i++) {
+            String name = outputFiles[i].getName();
+            if (outputFiles[i].getName().startsWith("part-r-")) {
+                FileInputStream fileInputStream = null;
+                byte[] bFile = new byte[(int) outputFiles[i].length()];
+
+                //convert file into array of bytes
+                fileInputStream = new FileInputStream(outputFiles[i]);
+                fileInputStream.read(bFile);
+                fileInputStream.close();
+                String[] bString = new String(bFile, StandardCharsets.UTF_8).split("\n");
+                String[] keyValue;
+                for (String row : bString) {
+                    keyValue = row.split("\t");
+                    int count = (int) Double.parseDouble(keyValue[0]);
+                    wordFrequencies.add(new WordFrequency(keyValue[1], count));
+                }
+            }
+        }
+
+        Collections.sort(wordFrequencies);
+        wordFrequencies = wordFrequencies.subList(0, 300);
+
+        final Dimension dimension = new Dimension(600, 600);
+        final WordCloud wordCloud = new WordCloud(dimension, CollisionMode.PIXEL_PERFECT);
+        wordCloud.setPadding(2);
+        wordCloud.setBackground(new CircleBackground(300));
+        wordCloud.setColorPalette(new ColorPalette(new Color(0x4055F1), new Color(0x408DF1), new Color(0x40AAF1), new Color(0x40C5F1), new Color(0x40D3F1), new Color(0xFFFFFF)));
+        wordCloud.setFontScalar(new SqrtFontScalar(8, 50));
+        wordCloud.build(wordFrequencies);
+        wordCloud.writeToFile(LambdaController.NORMALIZED_CLOUD_PATH + removeExtension(documentWcPath.getName()) + "-normalized.png");
+    }
+
+    public static void allTfIdf() throws IOException, ClassNotFoundException, InterruptedException {
+        long now = System.currentTimeMillis();
+
+        // tfIdf Job
+
+        BasicConfigurator.configure();                    // Log4j Config oder ConfigFile in Resources Folder
+        System.setProperty("hadoop.home.dir", "/");
+
+        Configuration conf = new Configuration();
+
+        Job job = Job.getInstance(conf, "allTfIdf");
+        job.setJarByClass(WordCount.class);
+        job.setMapperClass(AllTfIdfMapper.class);
+        job.setReducerClass(TfIdfReducer.class);
+        job.setNumReduceTasks(LambdaController.NUM_REDUCE_TASKS);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(DoubleWritable.class);
+
+        job.setInputFormatClass(FileInputFormat.class);
+
+        FileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path(LambdaController.INVERSE_DOCUMENT_FREQUENCIES_PATH));
+
+        File[] folders = new File(LambdaController.TERM_FREQUENCIES_PATH).listFiles();
+        org.apache.hadoop.fs.Path folderPath;
+        ArrayList<String> documentNames = new ArrayList<>();
+        for (File folder : folders) {
+            if (folder.isDirectory()) {
+                folderPath = new org.apache.hadoop.fs.Path(folder.getAbsolutePath());
+                FileInputFormat.addInputPath(job, folderPath);
+                documentNames.add(folder.getName());
+                System.out.println("Adding folder: " + folder.getName() + " at: " + folderPath);
+            } else {
+                System.out.println("FOUND NON FOLDER FILE: " + folder.getName());
+            }
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new ObjectOutputStream(out).writeObject(documentNames.toArray());
+        String serializedDocumentNames = new String(Hex.encodeHex(out.toByteArray()));
+
+        conf.set("documentNames", serializedDocumentNames);
+
+        FileOutputFormat.setOutputPath(job, new org.apache.hadoop.fs.Path("/tmp/all-tfIdf-output-" + now));
+
+        job.waitForCompletion(true);
+
+        // Job 2 - switch and sort
+        /*
+
+        job = Job.getInstance(conf, "switchAndSort");
+        job.setJarByClass(WordCount.class);
+        job.setMapperClass(DoubleSwitchMapper.class);
+        job.setReducerClass(Reducer.class);
+        job.setOutputKeyClass(DoubleWritable.class);
+        job.setOutputValueClass(Text.class);
+
+        job.setNumReduceTasks(LambdaController.NUM_REDUCE_TASKS);
+
+        job.setSortComparatorClass(MyDescendingDoubleComparator.class);
+
+        job.setInputFormatClass(SequenceFileInputFormat.class);
+
+        SequenceFileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path("/tmp/tfIdf-output-" + now));
+
+        deleteDirectoryStream(new File(LambdaController.TD_IDF_PATH + removeExtension(documentWcPath.getName())).toPath());
+        org.apache.hadoop.fs.Path outputPath = new org.apache.hadoop.fs.Path(LambdaController.TD_IDF_PATH + removeExtension(documentWcPath.getName()));
 
         FileOutputFormat.setOutputPath(job, outputPath);
 
         job.waitForCompletion(true);
 
 
+        List<WordFrequency> wordFrequencies = new ArrayList<WordFrequency>();
 
+        File[] outputFiles = new File(outputPath.toString()).listFiles();
+        for (int i = 0; i < outputFiles.length; i++) {
+            String name = outputFiles[i].getName();
+            if (outputFiles[i].getName().startsWith("part-r-")) {
+                FileInputStream fileInputStream = null;
+                byte[] bFile = new byte[(int) outputFiles[i].length()];
+
+                //convert file into array of bytes
+                fileInputStream = new FileInputStream(outputFiles[i]);
+                fileInputStream.read(bFile);
+                fileInputStream.close();
+                String[] bString = new String(bFile, StandardCharsets.UTF_8).split("\n");
+                String[] keyValue;
+                for (String row : bString) {
+                    keyValue = row.split("\t");
+                    int count = (int) Double.parseDouble(keyValue[0]);
+                    wordFrequencies.add(new WordFrequency(keyValue[1], count));
+                }
+            }
+        }
+
+        Collections.sort(wordFrequencies);
+        wordFrequencies = wordFrequencies.subList(0, 300);
+
+        final Dimension dimension = new Dimension(600, 600);
+        final WordCloud wordCloud = new WordCloud(dimension, CollisionMode.PIXEL_PERFECT);
+        wordCloud.setPadding(2);
+        wordCloud.setBackground(new CircleBackground(300));
+        wordCloud.setColorPalette(new ColorPalette(new Color(0x4055F1), new Color(0x408DF1), new Color(0x40AAF1), new Color(0x40C5F1), new Color(0x40D3F1), new Color(0xFFFFFF)));
+        wordCloud.setFontScalar(new SqrtFontScalar(8, 50));
+        wordCloud.build(wordFrequencies);
+        wordCloud.writeToFile(LambdaController.NORMALIZED_CLOUD_PATH + removeExtension(documentWcPath.getName()) + "-normalized.png");
+
+         */
     }
 
     public static List<WordFrequency> wordFrequency(Path path) throws IOException, ClassNotFoundException, InterruptedException {
@@ -408,7 +584,7 @@ public class WordCount {
 
         public void map(Text word, IntWritable documentFrequency, Context context) throws IOException, InterruptedException {
             int numberOfDocuments = context.getConfiguration().getInt("numberOfDocuments", 0);
-            inverseDocumentFrequency.set(Math.log((double)numberOfDocuments / documentFrequency.get()));
+            inverseDocumentFrequency.set(Math.log((double) numberOfDocuments / documentFrequency.get()));
             context.write(word, inverseDocumentFrequency);
         }
     }
@@ -426,7 +602,7 @@ public class WordCount {
         }
     }
 
-    public static class TfIdfReducer extends Reducer<Text,DoubleWritable,Text,DoubleWritable> {
+    public static class TfIdfReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
 
         private DoubleWritable result = new DoubleWritable();
 
@@ -434,15 +610,53 @@ public class WordCount {
             Iterator<DoubleWritable> valuesIterator = values.iterator();
             DoubleWritable first = valuesIterator.next();
 
-            if(valuesIterator.hasNext()){
-                result.set(first.get() * valuesIterator.next().get() * valuesIterator.next().get());
-            }else{
+            if (valuesIterator.hasNext()) {
+                result.set(first.get() * valuesIterator.next().get());
+            } else {
                 result.set(0);
             }
 
             context.write(word, result);
         }
     }
+
+    public static class AllTfIdfMapper extends Mapper<Object, Text, Text, DoubleWritable> {
+
+        private Text word = new Text();
+        private DoubleWritable value = new DoubleWritable();
+
+        public void map(Object key, Text row, Context context) throws IOException, InterruptedException {
+            String fileName = ((FileSplit) context.getInputSplit()).getPath().getParent().getName();
+
+            String[] keyValue = row.toString().split("\t");
+
+            if(LambdaController.INVERSE_DOCUMENT_FREQUENCIES_PATH.startsWith(fileName)){
+                ByteArrayInputStream in = null;
+                try {
+                    in = new ByteArrayInputStream(Hex.decodeHex(context.getConfiguration().get("documentNames", null).toCharArray()));
+                } catch (DecoderException e) {
+                    e.printStackTrace();
+                }
+                String[] documentNames = new String[0];
+                try {
+                    documentNames = (String[]) new ObjectInputStream(in).readObject();
+                } catch (ClassNotFoundException e) {
+                    e.printStackTrace();
+                }
+                for(String documentName : documentNames){
+                    word.set(documentName + "," + keyValue[0]);
+                    value.set(Double.parseDouble(keyValue[1]));
+                    context.write(word, value);
+                }
+            }else{
+                word.set(fileName + "," + keyValue[0]);
+                value.set(Double.parseDouble(keyValue[1]));
+                context.write(word, value);
+            }
+
+        }
+    }
+
 
     public static class IntSwitchMapper extends Mapper<Text, IntWritable, IntWritable, Text> {
 
@@ -472,6 +686,7 @@ public class WordCount {
             Text word = new Text(keyValue[1]);
 
             int mostFrequentWordFrequency = context.getConfiguration().getInt("mostFrequentWordFrequency", 0);
+
             value.set(((double) count / mostFrequentWordFrequency));
             context.write(word, value);
         }
