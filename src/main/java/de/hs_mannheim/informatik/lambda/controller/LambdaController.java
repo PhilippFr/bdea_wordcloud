@@ -7,7 +7,7 @@ import com.kennycason.kumo.bg.CircleBackground;
 import com.kennycason.kumo.font.scale.SqrtFontScalar;
 import com.kennycason.kumo.nlp.FrequencyAnalyzer;
 import com.kennycason.kumo.palette.ColorPalette;
-import de.hs_mannheim.informatik.lambda.hadoop.WordCount;
+import de.hs_mannheim.informatik.lambda.hadoop.TagCloudNormalizer;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,7 +66,7 @@ public class LambdaController {
             saveDocument(file);
 
             createNonNormalizedTagCloud(removeExtension(file.getOriginalFilename()), new String(file.getBytes()));
-            WordCount.termFrequencies(Paths.get(DOCUMENT_PATH + file.getOriginalFilename()));
+            TagCloudNormalizer.termFrequencies(Paths.get(DOCUMENT_PATH + file.getOriginalFilename()));
 
             model.addAttribute("nonNormalizedTagClouds", listTagClouds(NON_NORMALIZED_CLOUD_PATH));
             model.addAttribute("normalizedTagClouds", listTagClouds(NORMALIZED_CLOUD_PATH));
@@ -106,7 +106,7 @@ public class LambdaController {
     }
 
     private void createNormalizedTagClouds() throws IOException, InterruptedException, ClassNotFoundException {
-        WordCount.allTfIdf();
+        TagCloudNormalizer.allTfIdf();
     }
 
     private void createNonNormalizedTagCloud(String filename, String content) throws IOException, InterruptedException, ClassNotFoundException {

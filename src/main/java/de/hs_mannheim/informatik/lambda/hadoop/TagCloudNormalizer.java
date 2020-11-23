@@ -32,7 +32,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -42,7 +41,7 @@ import java.util.regex.Pattern;
 
 import static org.apache.commons.io.FilenameUtils.removeExtension;
 
-public class WordCount {
+public class TagCloudNormalizer {
 
     public static void deleteDirectoryStream(Path path) throws IOException {
         File file = new File(path.toString());
@@ -61,7 +60,7 @@ public class WordCount {
         Configuration conf = new Configuration();
 
         Job job = Job.getInstance(conf, "wordCount");
-        job.setJarByClass(WordCount.class);
+        job.setJarByClass(TagCloudNormalizer.class);
         job.setMapperClass(TokenizerMapper.class);
         job.setCombinerClass(IntSumReducer.class);
         job.setReducerClass(IntSumReducer.class);
@@ -94,7 +93,7 @@ public class WordCount {
         // -----------------------> Job 1 - Count in how many documents the word is appearing
 
         Job job = Job.getInstance(conf, "documentFrequency");
-        job.setJarByClass(WordCount.class);
+        job.setJarByClass(TagCloudNormalizer.class);
         job.setMapperClass(DocumentFrequencyMapper.class);
         job.setCombinerClass(IntSumReducer.class);
         job.setReducerClass(IntSumReducer.class);
@@ -127,7 +126,7 @@ public class WordCount {
         // -----------------------> Job 2 - Calculate the inverse document frequency for every term in the corpus
 
         job = Job.getInstance(conf, "inverseDocumentFrequency");
-        job.setJarByClass(WordCount.class);
+        job.setJarByClass(TagCloudNormalizer.class);
         job.setMapperClass(InverseDocumentFrequencyMapper.class);
         job.setReducerClass(Reducer.class);
         job.setOutputKeyClass(Text.class);
@@ -156,7 +155,7 @@ public class WordCount {
         // -----------------------> Job 1 - calculate tfidf
 
         Job job = Job.getInstance(conf, "singleTfIdf");
-        job.setJarByClass(WordCount.class);
+        job.setJarByClass(TagCloudNormalizer.class);
         job.setMapperClass(TfIdfMapper.class);
         job.setReducerClass(TfIdfReducer.class);
         job.setNumReduceTasks(LambdaController.NUM_REDUCE_TASKS);
@@ -174,7 +173,7 @@ public class WordCount {
         // -----------------------> Job 2 - switch and sort
 
         job = Job.getInstance(conf, "switchAndSort");
-        job.setJarByClass(WordCount.class);
+        job.setJarByClass(TagCloudNormalizer.class);
         job.setMapperClass(DoubleSwitchMapper.class);
         job.setReducerClass(Reducer.class);
         job.setOutputKeyClass(DoubleWritable.class);
@@ -255,7 +254,7 @@ public class WordCount {
         // -----------------------> Job 1 -
 
         Job job = Job.getInstance(conf, "allTfIdf");
-        job.setJarByClass(WordCount.class);
+        job.setJarByClass(TagCloudNormalizer.class);
         job.setMapperClass(AllTfIdfMapper.class);
         job.setReducerClass(TfIdfReducer.class);
         job.setNumReduceTasks(LambdaController.NUM_REDUCE_TASKS);
