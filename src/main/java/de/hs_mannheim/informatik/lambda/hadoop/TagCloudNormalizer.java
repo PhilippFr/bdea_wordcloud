@@ -34,6 +34,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -77,9 +78,6 @@ public class TagCloudNormalizer {
         FileOutputFormat.setOutputPath(job, termFrequenciesPath);
 
         job.waitForCompletion(true);
-
-        inverseDocumentFrequencies();
-        singleTfIdf(termFrequenciesPath);
     }
 
     public static void inverseDocumentFrequencies() throws IOException, ClassNotFoundException, InterruptedException {
@@ -185,14 +183,14 @@ public class TagCloudNormalizer {
         SequenceFileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path("/tmp/tfIdf-output-" + now));
 
         // delete old tfidf result
-        deleteDirectoryStream(new File(LambdaController.TD_IDF_PATH + removeExtension(termFrequenciesPath.getName())).toPath());
-        org.apache.hadoop.fs.Path singleTfIdfOutputPath = new org.apache.hadoop.fs.Path(LambdaController.TD_IDF_PATH + removeExtension(termFrequenciesPath.getName()));
+        deleteDirectoryStream(new File(LambdaController.SINGLE_TF_IDF_PATH + removeExtension(termFrequenciesPath.getName())).toPath());
+        org.apache.hadoop.fs.Path singleTfIdfOutputPath = new org.apache.hadoop.fs.Path(LambdaController.SINGLE_TF_IDF_PATH + removeExtension(termFrequenciesPath.getName()));
 
         FileOutputFormat.setOutputPath(job, singleTfIdfOutputPath);
 
         job.waitForCompletion(true);
 
-        // -----------------------> create wordcloud from single tfidf output
+        // -----------------------> create tag cloud from tfidf of one document
 
         List<WordFrequency> wordFrequencies = new ArrayList<>();
 
@@ -231,8 +229,6 @@ public class TagCloudNormalizer {
     }
 
     public static void allTfIdf() throws IOException, ClassNotFoundException, InterruptedException {
-        long now = System.currentTimeMillis();
-
         BasicConfigurator.configure();                    // Log4j Config oder ConfigFile in Resources Folder
         System.setProperty("hadoop.home.dir", "/");
 
@@ -251,7 +247,7 @@ public class TagCloudNormalizer {
         String[] documentNamesArray = documentNames.toArray(new String[0]);
         conf.setStrings("documentNames", documentNamesArray);
 
-        // -----------------------> Job 1 -
+        // -----------------------> Job 1 - calculate tfidf for all documents
 
         Job job = Job.getInstance(conf, "allTfIdf");
         job.setJarByClass(TagCloudNormalizer.class);
@@ -274,9 +270,97 @@ public class TagCloudNormalizer {
             }
         }
 
-        FileOutputFormat.setOutputPath(job, new org.apache.hadoop.fs.Path("/tmp/all-tfIdf-output-" + now));
+        // delete old tfidf result
+        deleteDirectoryStream(new File(LambdaController.ALL_TF_IDF_PATH).toPath());
+        org.apache.hadoop.fs.Path allTfIdfOutputPath = new org.apache.hadoop.fs.Path(LambdaController.ALL_TF_IDF_PATH);
+        FileOutputFormat.setOutputPath(job, allTfIdfOutputPath);
 
         job.waitForCompletion(true);
+
+        // -----------------------> create tag cloud from tfidf of each document
+
+        HashMap<String, List<WordFrequency>> documentsIdIdf = new HashMap<>();
+
+        File[] outputFiles = new File(allTfIdfOutputPath.toString()).listFiles();
+        for (File outputFile : outputFiles) {
+            if (outputFile.getName().startsWith("part-r-")) {
+                FileInputStream fileInputStream;
+                byte[] bFile = new byte[(int) outputFile.length()];
+
+                // convert file into array of bytes
+                fileInputStream = new FileInputStream(outputFile);
+                fileInputStream.read(bFile);
+                fileInputStream.close();
+                String[] bString = new String(bFile, StandardCharsets.UTF_8).split("\n");
+                for (String row : bString) {
+                    String[] parts = row.split("\t");
+                    String documentName = parts[0].split(";")[0];
+                    String word = parts[0].split(";")[1];
+                    int value = (int) Double.parseDouble(parts[1]);
+                    if(documentsIdIdf.get(documentName) == null){
+                        documentsIdIdf.put(documentName, new ArrayList<>());
+                    }
+                    documentsIdIdf.get(documentName).add(new WordFrequency(word, value));
+                }
+            }
+        }
+
+        for(String documentNameTdIdf: documentsIdIdf.keySet()){
+            List<WordFrequency> currentDocumentList = documentsIdIdf.get(documentNameTdIdf);
+
+            Collections.sort(currentDocumentList);
+            currentDocumentList = currentDocumentList.subList(0, 300);
+
+            final Dimension dimension = new Dimension(600, 600);
+            final WordCloud wordCloud = new WordCloud(dimension, CollisionMode.PIXEL_PERFECT);
+            wordCloud.setPadding(2);
+            wordCloud.setBackground(new CircleBackground(300));
+            wordCloud.setColorPalette(new ColorPalette(new Color(0x4055F1), new Color(0x408DF1), new Color(0x40AAF1), new Color(0x40C5F1), new Color(0x40D3F1), new Color(0xFFFFFF)));
+            wordCloud.setFontScalar(new SqrtFontScalar(8, 50));
+            wordCloud.build(currentDocumentList);
+            wordCloud.writeToFile(LambdaController.NORMALIZED_CLOUD_PATH + removeExtension(documentNameTdIdf) + "-normalized.png");
+        }
+
+    }
+
+    public static void globalTfIdf() throws IOException, ClassNotFoundException, InterruptedException {
+        BasicConfigurator.configure();                    // Log4j Config oder ConfigFile in Resources Folder
+        System.setProperty("hadoop.home.dir", "/");
+
+        Configuration conf = new Configuration();
+
+        // -----------------------> Job 1 - calculate term frequencies over all documents
+
+        Job job = Job.getInstance(conf, "globalTermFrequency");
+        job.setJarByClass(TagCloudNormalizer.class);
+        job.setMapperClass(TokenizerMapper.class);
+        job.setCombinerClass(IntSumReducer.class);
+        job.setReducerClass(IntSumReducer.class);
+        job.setNumReduceTasks(LambdaController.NUM_REDUCE_TASKS);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+
+        File[] folder = new File(LambdaController.DOCUMENTS_PATH).listFiles();
+        org.apache.hadoop.fs.Path filePath;
+        ArrayList<String> documentNames = new ArrayList<>();
+        for (File file : folder) {
+            filePath = new org.apache.hadoop.fs.Path(file.getAbsolutePath());
+            FileInputFormat.addInputPath(job, filePath);
+            documentNames.add(file.getName());
+            System.out.println("Adding file: " + file.getName() + " at: " + filePath);
+        }
+
+        // delete old term frequencies folder for this document
+        deleteDirectoryStream(new File(LambdaController.TERM_FREQUENCIES_PATH + "global").toPath());
+
+        org.apache.hadoop.fs.Path termFrequenciesPath = new org.apache.hadoop.fs.Path(LambdaController.TERM_FREQUENCIES_PATH + "global");
+        FileOutputFormat.setOutputPath(job, termFrequenciesPath);
+
+        job.waitForCompletion(true);
+
+        // -----------------------> Job 2 - calculate tfidf for global term frequencies
+
+       singleTfIdf(termFrequenciesPath);
     }
 
     public static class TokenizerMapper extends Mapper<Object, Text, Text, IntWritable> {
@@ -356,12 +440,12 @@ public class TagCloudNormalizer {
                 String[] documentNames = context.getConfiguration().getStrings("documentNames");
 
                 for (String documentName : documentNames) {
-                    word.set(documentName + "," + keyValue[0]);
+                    word.set(documentName + ";" + keyValue[0]);
                     value.set(Double.parseDouble(keyValue[1]));
                     context.write(word, value);
                 }
             } else {
-                word.set(fileName + "," + keyValue[0]);
+                word.set(fileName + ";" + keyValue[0]);
                 value.set(Double.parseDouble(keyValue[1]));
                 context.write(word, value);
             }

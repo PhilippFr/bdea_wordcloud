@@ -24,6 +24,7 @@ target/
 non-normalized-tagclouds/*
 normalized-tagclouds/*
 documents/*
-normalized-term-frequencies/*
+term-frequencies/*
 inverse-document-frequencies/*
-td-idf/*
+single-tf-idf/*
+all-tf-idf/*

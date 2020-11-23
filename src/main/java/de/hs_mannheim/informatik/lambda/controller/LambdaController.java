@@ -30,11 +30,12 @@ import static org.apache.commons.io.FilenameUtils.removeExtension;
 public class LambdaController {
     public final static String NON_NORMALIZED_CLOUD_PATH = "non-normalized-tagclouds/";
     public final static String NORMALIZED_CLOUD_PATH = "normalized-tagclouds/";
-    public final static String DOCUMENT_PATH = "documents/";
+    public final static String DOCUMENTS_PATH = "documents/";
     public final static String TERM_FREQUENCIES_PATH = "term-frequencies/";
     public final static String INVERSE_DOCUMENT_FREQUENCIES_PATH = "inverse-document-frequencies/";
-    public final static String TD_IDF_PATH = "td-idf/";
-    public final static int NUM_REDUCE_TASKS = 4;
+    public final static String SINGLE_TF_IDF_PATH = "single-tf-idf/";
+    public final static String ALL_TF_IDF_PATH = "all-tf-idf/";
+    public final static int NUM_REDUCE_TASKS = 1;
 
     @GetMapping("/createNormalizedTagClouds")
     public String createNormalizedTagClouds(Model model) throws InterruptedException, IOException, ClassNotFoundException {
@@ -66,7 +67,7 @@ public class LambdaController {
             saveDocument(file);
 
             createNonNormalizedTagCloud(removeExtension(file.getOriginalFilename()), new String(file.getBytes()));
-            TagCloudNormalizer.termFrequencies(Paths.get(DOCUMENT_PATH + file.getOriginalFilename()));
+            TagCloudNormalizer.termFrequencies(Paths.get(DOCUMENTS_PATH + file.getOriginalFilename()));
 
             model.addAttribute("nonNormalizedTagClouds", listTagClouds(NON_NORMALIZED_CLOUD_PATH));
             model.addAttribute("normalizedTagClouds", listTagClouds(NORMALIZED_CLOUD_PATH));
@@ -82,12 +83,12 @@ public class LambdaController {
 
     private void saveDocument(MultipartFile file) throws Exception {
         // Get the file and save it somewhere
-        File directory = new File(DOCUMENT_PATH);
+        File directory = new File(DOCUMENTS_PATH);
         if (!directory.exists()) {
             directory.mkdir();
         }
         byte[] bytes = file.getBytes();
-        Path path = Paths.get(DOCUMENT_PATH + file.getOriginalFilename());
+        Path path = Paths.get(DOCUMENTS_PATH + file.getOriginalFilename());
         Files.write(path, bytes);
     }
 
@@ -106,7 +107,9 @@ public class LambdaController {
     }
 
     private void createNormalizedTagClouds() throws IOException, InterruptedException, ClassNotFoundException {
+        TagCloudNormalizer.inverseDocumentFrequencies();
         TagCloudNormalizer.allTfIdf();
+        TagCloudNormalizer.globalTfIdf();
     }
 
     private void createNonNormalizedTagCloud(String filename, String content) throws IOException, InterruptedException, ClassNotFoundException {
