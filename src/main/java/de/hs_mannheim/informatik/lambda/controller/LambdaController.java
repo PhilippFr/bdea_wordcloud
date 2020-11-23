@@ -31,17 +31,16 @@ public class LambdaController {
     public final static String NON_NORMALIZED_CLOUD_PATH = "non-normalized-tagclouds/";
     public final static String NORMALIZED_CLOUD_PATH = "normalized-tagclouds/";
     public final static String DOCUMENT_PATH = "documents/";
-    public final static String NORMALIZED_TERM_FREQUENCIES_PATH = "normalized-term-frequencies/";
     public final static String TERM_FREQUENCIES_PATH = "term-frequencies/";
     public final static String INVERSE_DOCUMENT_FREQUENCIES_PATH = "inverse-document-frequencies/";
     public final static String TD_IDF_PATH = "td-idf/";
-    public final static int NUM_REDUCE_TASKS = 1;
+    public final static int NUM_REDUCE_TASKS = 4;
 
     @GetMapping("/createNormalizedTagClouds")
     public String createNormalizedTagClouds(Model model) throws InterruptedException, IOException, ClassNotFoundException {
         System.out.println("WORKING WORKING WORKING");
+        createNormalizedTagClouds();
 
-        WordCount.allTfIdf();
         model.addAttribute("nonNormalizedTagClouds", listTagClouds(NON_NORMALIZED_CLOUD_PATH));
         model.addAttribute("normalizedTagClouds", listTagClouds(NORMALIZED_CLOUD_PATH));
         model.addAttribute("nonNormalizedTagCloudsPath", NON_NORMALIZED_CLOUD_PATH);
@@ -64,9 +63,11 @@ public class LambdaController {
     public String handleFileUpload(@RequestParam("file") MultipartFile file, Model model) {
         try {
             model.addAttribute("message", "Datei erfolgreich hochgeladen: " + file.getOriginalFilename());
-            Path path = this.saveDocument(file);
+            saveDocument(file);
+
             createNonNormalizedTagCloud(removeExtension(file.getOriginalFilename()), new String(file.getBytes()));
-            testNormalizer(path);
+            WordCount.termFrequencies(Paths.get(DOCUMENT_PATH + file.getOriginalFilename()));
+
             model.addAttribute("nonNormalizedTagClouds", listTagClouds(NON_NORMALIZED_CLOUD_PATH));
             model.addAttribute("normalizedTagClouds", listTagClouds(NORMALIZED_CLOUD_PATH));
             model.addAttribute("nonNormalizedTagCloudsPath", NON_NORMALIZED_CLOUD_PATH);
@@ -79,7 +80,7 @@ public class LambdaController {
         return "upload";
     }
 
-    private Path saveDocument(MultipartFile file) throws Exception {
+    private void saveDocument(MultipartFile file) throws Exception {
         // Get the file and save it somewhere
         File directory = new File(DOCUMENT_PATH);
         if (!directory.exists()) {
@@ -88,8 +89,6 @@ public class LambdaController {
         byte[] bytes = file.getBytes();
         Path path = Paths.get(DOCUMENT_PATH + file.getOriginalFilename());
         Files.write(path, bytes);
-
-        return path;
     }
 
     private String[] listTagClouds(String path) {
@@ -106,8 +105,8 @@ public class LambdaController {
         return clouds;
     }
 
-    private void testNormalizer(Path path) throws IOException, InterruptedException, ClassNotFoundException {
-        WordCount.normalizedWordFrequency(path);
+    private void createNormalizedTagClouds() throws IOException, InterruptedException, ClassNotFoundException {
+        WordCount.allTfIdf();
     }
 
     private void createNonNormalizedTagCloud(String filename, String content) throws IOException, InterruptedException, ClassNotFoundException {
